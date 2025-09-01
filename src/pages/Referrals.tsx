@@ -99,7 +99,7 @@ export const Referrals: React.FC = () => {
       {/* Header */}
       <div className="mb-8">
         <h1 className="font-orbitron text-4xl font-bold mb-2 hover-electric">
-          Referral Program
+          Referral Program (COMING SOON)...
         </h1>
         <p className="text-muted-foreground text-lg">
           Invite friends and earn bonus rewards together

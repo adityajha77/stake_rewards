@@ -44,6 +44,7 @@ export const Stake: React.FC = () => {
   const { writeContract } = useWriteContract();
   const [timeUntilNextClaim, setTimeUntilNextClaim] = useState<string | null>(null);
   const [canClaim, setCanClaim] = useState<boolean>(false);
+  const [approvalPending, setApprovalPending] = useState<boolean>(false);
 
   // Read user's ADT balance
   const { data: adtBalance, refetch: refetchAdtBalance } = useReadContract({
@@ -226,7 +227,7 @@ export const Stake: React.FC = () => {
       address: STAKING_CONTRACT_ADDRESS,
       abi: STAKING_CONTRACT_ABI,
       functionName: 'stake',
-      args: [amountToStake],
+      args: [amountToStake, '0x0000000000000000000000000000000000000000'],
       chainId: sepolia.id,
       account: address,
       chain: sepolia,
@@ -324,16 +325,17 @@ export const Stake: React.FC = () => {
     },
   });
 
+
   useEffect(() => {
     if (isApproved) {
       toast({
         title: "Approval Successful",
-        description: "You have approved the staking contract to spend your ADT tokens.",
+        description: "You have approved the staking contract to spend your ADT tokens. Proceeding with staking...",
       });
-      // Proceed to stake after approval
-      handleStake();
+      setApprovalPending(false); // Reset approval pending state
+      handleStake(); // Automatically trigger stake after successful approval
     }
-  }, [isApproved, handleStake, toast]);
+  }, [isApproved, toast, handleStake]);
 
   useEffect(() => {
     if (isFaucetClaimed) {
@@ -371,17 +373,27 @@ export const Stake: React.FC = () => {
     }
 
     const amountToStake = parseUnits(stakeAmount, 18);
+    const currentAllowance = allowance !== undefined ? (allowance as bigint) : 0n;
 
-    if (allowance !== undefined && (allowance as bigint) < amountToStake) {
-      approveWrite({
-        address: ADITYA_TOKEN_ADDRESS,
-        abi: ADITYA_TOKEN_ABI,
-        functionName: 'approve',
-        args: [STAKING_CONTRACT_ADDRESS, amountToStake],
-        chainId: sepolia.id,
-        account: address,
-        chain: sepolia,
-      });
+    if (currentAllowance < amountToStake) {
+      if (!approvalPending) {
+        approveWrite({
+          address: ADITYA_TOKEN_ADDRESS,
+          abi: ADITYA_TOKEN_ABI,
+          functionName: 'approve',
+          args: [STAKING_CONTRACT_ADDRESS, amountToStake],
+          chainId: sepolia.id,
+          account: address,
+          chain: sepolia,
+        });
+        setApprovalPending(true);
+      } else {
+        toast({
+          title: "Approval Pending",
+          description: "Please wait for the current approval transaction to complete.",
+          variant: "default",
+        });
+      }
     } else {
       handleStake();
     }
@@ -390,8 +402,8 @@ export const Stake: React.FC = () => {
   useEffect(() => {
     if (isUnstaked) {
       toast({
-        title: "Unstake Initiated",
-        description: `You have initiated unstaking for ${unstakeAmount} ADT. Your rewards will be claimed automatically.`,
+        title: "Unstake Successful",
+        description: `You have successfully unstaked ${unstakeAmount} ADT. Your rewards will be claimed automatically.`,
       });
       setUnstakeAmount('');
       refetchAdtBalance();
@@ -400,7 +412,7 @@ export const Stake: React.FC = () => {
       // Automatically claim rewards after unstaking
       handleClaimRewards();
     }
-  }, [isUnstaked, unstakeAmount, refetchAdtBalance, refetchStakedBalance, refetchEarnedRewards, handleClaimRewards]); // Added dependencies
+  }, [isUnstaked, unstakeAmount, refetchAdtBalance, refetchStakedBalance, refetchEarnedRewards, handleClaimRewards, toast]); // Added toast dependency
 
   useEffect(() => {
     if (isClaimed) {
@@ -562,7 +574,7 @@ export const Stake: React.FC = () => {
                 onClick={handleApproveAndStake}
                 disabled={!stakeAmount || !isConnected || isApproving || isStaking}
               >
-                {isApproving ? "Approving..." : isStaking ? "Staking..." : "Stake ADT"}
+                {isApproving ? "Approving..." : isStaking ? "Staking..." : (approvalPending ? "Approval Pending, Click to Stake" : "Stake ADT")}
               </Button>
             </div>
           </div>

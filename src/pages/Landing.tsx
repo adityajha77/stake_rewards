@@ -33,10 +33,10 @@ const features = [
 ];
 
 const stats = [
-  { label: "Total Value Locked", value: "$12.5M" },
-  { label: "Active Stakers", value: "2,847" },
-  { label: "Average APY", value: "18.4%" },
-  { label: "Rewards Distributed", value: "$1.2M" }
+  { label: "Total Value Locked", value: "100,000" },
+  { label: "Active Stakers", value: "3" },
+  { label: "Average APY", value: "10%" },
+  { label: "Rewards Distributed", value: "10,000" }
 ];
 
 export const Landing: React.FC = () => {

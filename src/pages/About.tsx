@@ -303,6 +303,30 @@ export const About: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* Developer Info */}
+      <section className="text-center mt-16">
+        <h2 className="font-orbitron text-3xl font-bold mb-8 hover-electric">
+          Developer
+        </h2>
+        <div className="flex justify-center items-center space-x-4 mb-4">
+          <a href="https://aditya-portfolio-tau.vercel.app/" target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" className="border-electric text-electric hover:bg-electric/10">
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Portfolio
+            </Button>
+          </a>
+          <a href="https://github.com/adityajha77" target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" className="border-electric text-electric hover:bg-electric/10">
+              <ExternalLink className="h-4 w-4 mr-2" />
+              GitHub
+            </Button>
+          </a>
+        </div>
+        <p className="text-muted-foreground">
+          Made with love from Aditya (India)
+        </p>
+      </section>
     </div>
   );
 };
