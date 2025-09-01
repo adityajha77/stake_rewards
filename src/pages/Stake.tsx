@@ -15,10 +15,11 @@ import {
 } from 'lucide-react';
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { sepolia } from 'wagmi/chains'; // Import sepolia chain
-import { parseUnits, formatUnits } from 'viem';
+import { parseUnits, formatUnits, formatEther } from 'viem';
 import { ADITYA_TOKEN_ADDRESS, ADITYA_TOKEN_ABI, STAKING_CONTRACT_ADDRESS, STAKING_CONTRACT_ABI } from '@/contracts';
 import { useToast } from '@/components/ui/use-toast';
 import { config } from '@/lib/wagmi'; // Import wagmi config
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 const availablePools = [
   {
@@ -41,6 +42,8 @@ export const Stake: React.FC = () => {
   const [stakeAmount, setStakeAmount] = useState<string>('');
   const [unstakeAmount, setUnstakeAmount] = useState<string>('');
   const { writeContract } = useWriteContract();
+  const [timeUntilNextClaim, setTimeUntilNextClaim] = useState<string | null>(null);
+  const [canClaim, setCanClaim] = useState<boolean>(false);
 
   // Read user's ADT balance
   const { data: adtBalance, refetch: refetchAdtBalance } = useReadContract({
@@ -67,7 +70,45 @@ export const Stake: React.FC = () => {
       refetchInterval: 5000,
     },
   });
-  const stakedBalance = stakedBalanceData ? (stakedBalanceData as { amount: bigint, startTime: bigint }).amount : 0n;
+
+  // Read last claimed timestamp for faucet
+  const { data: lastClaimedTimestamp, refetch: refetchLastClaimedTimestamp } = useReadContract({
+    address: ADITYA_TOKEN_ADDRESS,
+    abi: ADITYA_TOKEN_ABI,
+    functionName: 'lastClaimed',
+    args: [address || '0x0'],
+    chainId: sepolia.id,
+    query: {
+      enabled: isConnected && !!address,
+      refetchInterval: 5000,
+    },
+  });
+
+  // Read faucet amount
+  const { data: faucetAmount, refetch: refetchFaucetAmount } = useReadContract({
+    address: ADITYA_TOKEN_ADDRESS,
+    abi: ADITYA_TOKEN_ABI,
+    functionName: 'faucetAmount',
+    chainId: sepolia.id,
+    query: {
+      enabled: isConnected,
+      refetchInterval: 5000,
+    },
+  });
+
+  // Read ONE_YEAR constant from contract
+  const { data: oneYearDuration } = useReadContract({
+    address: ADITYA_TOKEN_ADDRESS,
+    abi: ADITYA_TOKEN_ABI,
+    functionName: 'ONE_YEAR',
+    chainId: sepolia.id,
+    query: {
+      enabled: isConnected,
+    },
+  });
+
+  // ✅ FIX: Extract `amount` correctly from struct (array index 0)
+  const stakedBalance = stakedBalanceData ? (stakedBalanceData as [bigint, bigint])[0] : 0n;
 
   // Read user's earned rewards
   const { data: earnedRewards, refetch: refetchEarnedRewards } = useReadContract({
@@ -95,6 +136,19 @@ export const Stake: React.FC = () => {
     },
   });
 
+  // Faucet claim functionality
+  const { data: claimFaucetHash, writeContract: claimFaucetWrite } = useWriteContract({
+    mutation: {
+      onError: (error) => {
+        toast({
+          title: "Faucet Claim Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      },
+    },
+  });
+
   const handleMaxStake = () => {
     if (adtBalance) {
       setStakeAmount(formatUnits(adtBalance as bigint, 18));
@@ -108,14 +162,166 @@ export const Stake: React.FC = () => {
   };
 
   // Stake functionality
-  const { data: approveHash, writeContract: approveWrite } = useWriteContract();
-  const { data: stakeHash, writeContract: stakeWrite } = useWriteContract();
+  // Stake functionality
+  const { data: approveHash, writeContract: approveWrite } = useWriteContract({
+    mutation: {
+      onError: (error) => {
+        toast({
+          title: "Approval Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      },
+    },
+  });
+  const { data: stakeHash, writeContract: stakeWrite } = useWriteContract({
+    mutation: {
+      onError: (error) => {
+        toast({
+          title: "Stake Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      },
+    },
+  });
+
+  // Unstake functionality
+  const { data: unstakeHash, writeContract: unstakeWrite } = useWriteContract({
+    mutation: {
+      onError: (error) => {
+        toast({
+          title: "Unstake Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      },
+    },
+  });
+
+  // Claim Rewards functionality
+  const { data: claimHash, writeContract: claimWrite } = useWriteContract({
+    mutation: {
+      onError: (error) => {
+        toast({
+          title: "Claim Rewards Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      },
+    },
+  });
+
+  const handleStake = React.useCallback(() => {
+    if (!address || !stakeAmount || parseFloat(stakeAmount) <= 0) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid amount to stake.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const amountToStake = parseUnits(stakeAmount, 18);
+    stakeWrite({
+      address: STAKING_CONTRACT_ADDRESS,
+      abi: STAKING_CONTRACT_ABI,
+      functionName: 'stake',
+      args: [amountToStake],
+      chainId: sepolia.id,
+      account: address,
+      chain: sepolia,
+    });
+  }, [address, stakeAmount, stakeWrite, toast]);
+
+  const handleUnstake = React.useCallback(() => {
+    if (!address || !unstakeAmount || parseFloat(unstakeAmount) <= 0) {
+      toast({
+        title: "Error",
+        description: "Please enter a valid amount to unstake.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const amountToUnstake = parseUnits(unstakeAmount, 18);
+    unstakeWrite({
+      address: STAKING_CONTRACT_ADDRESS,
+      abi: STAKING_CONTRACT_ABI,
+      functionName: 'unstake',
+      args: [amountToUnstake],
+      chainId: sepolia.id,
+      account: address,
+      chain: sepolia,
+    });
+  }, [address, unstakeAmount, unstakeWrite, toast]);
+
+  const handleClaimRewards = React.useCallback(() => {
+    if (!address) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet.",
+        variant: "destructive",
+      });
+      return;
+    }
+    claimWrite({
+      address: STAKING_CONTRACT_ADDRESS,
+      abi: STAKING_CONTRACT_ABI,
+      functionName: 'claimReward',
+      chainId: sepolia.id,
+      account: address,
+      chain: sepolia,
+    });
+  }, [address, claimWrite, toast]);
+
+  const handleClaimFaucetTokens = React.useCallback(() => {
+    if (!address) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet to claim tokens.",
+        variant: "destructive",
+      });
+      return;
+    }
+    claimFaucetWrite({
+      address: ADITYA_TOKEN_ADDRESS,
+      abi: ADITYA_TOKEN_ABI,
+      functionName: 'claimTokens',
+      chainId: sepolia.id,
+      account: address,
+      chain: sepolia,
+    });
+  }, [address, claimFaucetWrite, toast]);
 
   const { isLoading: isApproving, isSuccess: isApproved } = useWaitForTransactionReceipt({
     hash: approveHash,
+    query: {
+      enabled: !!approveHash,
+    },
   });
   const { isLoading: isStaking, isSuccess: isStaked } = useWaitForTransactionReceipt({
     hash: stakeHash,
+    query: {
+      enabled: !!stakeHash,
+    },
+  });
+  const { isLoading: isUnstaking, isSuccess: isUnstaked } = useWaitForTransactionReceipt({
+    hash: unstakeHash,
+    query: {
+      enabled: !!unstakeHash,
+    },
+  });
+  const { isLoading: isClaiming, isSuccess: isClaimed } = useWaitForTransactionReceipt({
+    hash: claimHash,
+    query: {
+      enabled: !!claimHash,
+    },
+  });
+
+  const { isLoading: isClaimingFaucet, isSuccess: isFaucetClaimed } = useWaitForTransactionReceipt({
+    hash: claimFaucetHash,
+    query: {
+      enabled: !!claimFaucetHash,
+    },
   });
 
   useEffect(() => {
@@ -127,7 +333,18 @@ export const Stake: React.FC = () => {
       // Proceed to stake after approval
       handleStake();
     }
-  }, [isApproved]);
+  }, [isApproved, handleStake, toast]);
+
+  useEffect(() => {
+    if (isFaucetClaimed) {
+      toast({
+        title: "Faucet Claim Successful",
+        description: `You have claimed ${faucetAmount ? formatUnits(faucetAmount as bigint, 18) : '0'} ADT from the faucet.`,
+      });
+      refetchAdtBalance();
+      refetchLastClaimedTimestamp();
+    }
+  }, [isFaucetClaimed, faucetAmount, refetchAdtBalance, refetchLastClaimedTimestamp, toast]);
 
   useEffect(() => {
     if (isStaked) {
@@ -141,7 +358,7 @@ export const Stake: React.FC = () => {
       refetchEarnedRewards();
       refetchAllowance();
     }
-  }, [isStaked]);
+  }, [isStaked, stakeAmount, refetchAdtBalance, refetchStakedBalance, refetchEarnedRewards, refetchAllowance]);
 
   const handleApproveAndStake = async () => {
     if (!address || !stakeAmount || parseFloat(stakeAmount) <= 0) {
@@ -170,33 +387,6 @@ export const Stake: React.FC = () => {
     }
   };
 
-  const handleStake = () => {
-    if (!address || !stakeAmount || parseFloat(stakeAmount) <= 0) {
-      toast({
-        title: "Error",
-        description: "Please enter a valid amount to stake.",
-        variant: "destructive",
-      });
-      return;
-    }
-    const amountToStake = parseUnits(stakeAmount, 18);
-    stakeWrite({
-      address: STAKING_CONTRACT_ADDRESS,
-      abi: STAKING_CONTRACT_ABI,
-      functionName: 'stake',
-      args: [amountToStake],
-      chainId: sepolia.id,
-      account: address,
-      chain: sepolia,
-    });
-  };
-
-  // Unstake functionality
-  const { data: unstakeHash, writeContract: unstakeWrite } = useWriteContract();
-  const { isLoading: isUnstaking, isSuccess: isUnstaked } = useWaitForTransactionReceipt({
-    hash: unstakeHash,
-  });
-
   useEffect(() => {
     if (isUnstaked) {
       toast({
@@ -210,34 +400,7 @@ export const Stake: React.FC = () => {
       // Automatically claim rewards after unstaking
       handleClaimRewards();
     }
-  }, [isUnstaked]);
-
-  const handleUnstake = () => {
-    if (!address || !unstakeAmount || parseFloat(unstakeAmount) <= 0) {
-      toast({
-        title: "Error",
-        description: "Please enter a valid amount to unstake.",
-        variant: "destructive",
-      });
-      return;
-    }
-    const amountToUnstake = parseUnits(unstakeAmount, 18);
-    unstakeWrite({
-      address: STAKING_CONTRACT_ADDRESS,
-      abi: STAKING_CONTRACT_ABI,
-      functionName: 'unstake',
-      args: [amountToUnstake],
-      chainId: sepolia.id,
-      account: address,
-      chain: sepolia,
-    });
-  };
-
-  // Claim Rewards functionality
-  const { data: claimHash, writeContract: claimWrite } = useWriteContract();
-  const { isLoading: isClaiming, isSuccess: isClaimed } = useWaitForTransactionReceipt({
-    hash: claimHash,
-  });
+  }, [isUnstaked, unstakeAmount, refetchAdtBalance, refetchStakedBalance, refetchEarnedRewards, handleClaimRewards]); // Added dependencies
 
   useEffect(() => {
     if (isClaimed) {
@@ -249,31 +412,40 @@ export const Stake: React.FC = () => {
       refetchStakedBalance();
       refetchEarnedRewards();
     }
-  }, [isClaimed]);
+  }, [isClaimed, refetchAdtBalance, refetchStakedBalance, refetchEarnedRewards, toast]);
 
-  const handleClaimRewards = () => {
-    if (!address) {
-      toast({
-        title: "Error",
-        description: "Please connect your wallet.",
-        variant: "destructive",
-      });
-      return;
+  useEffect(() => {
+    if (lastClaimedTimestamp !== undefined && oneYearDuration !== undefined) {
+      const lastClaim = Number(lastClaimedTimestamp);
+      const oneYear = Number(oneYearDuration);
+      const nextClaimTime = lastClaim + oneYear;
+      const currentTime = Math.floor(Date.now() / 1000); // Current time in seconds
+
+      if (currentTime < nextClaimTime) {
+        setCanClaim(false);
+        const timeLeft = nextClaimTime - currentTime;
+        const days = Math.floor(timeLeft / (3600 * 24));
+        const hours = Math.floor((timeLeft % (3600 * 24)) / 3600);
+        const minutes = Math.floor((timeLeft % 3600) / 60);
+        const seconds = timeLeft % 60;
+        setTimeUntilNextClaim(`${days}d ${hours}h ${minutes}m ${seconds}s`);
+      } else {
+        setCanClaim(true);
+        setTimeUntilNextClaim(null);
+      }
+    } else {
+      setCanClaim(true); // Assume can claim if data not loaded
+      setTimeUntilNextClaim(null);
     }
-    claimWrite({
-      address: STAKING_CONTRACT_ADDRESS,
-      abi: STAKING_CONTRACT_ABI,
-      functionName: 'claimReward',
-      chainId: sepolia.id,
-      account: address,
-      chain: sepolia,
-    });
-  };
+  }, [lastClaimedTimestamp, oneYearDuration]);
 
   const formattedAdtBalance = adtBalance ? formatUnits(adtBalance as bigint, 18) : '0.00';
   const formattedStakedBalance = stakedBalance ? formatUnits(stakedBalance as bigint, 18) : '0.00';
   const formattedEarnedRewards = earnedRewards ? formatUnits(earnedRewards as bigint, 18) : '0.00';
-
+  const formattedFaucetAmount = faucetAmount ? formatUnits(faucetAmount as bigint, 18) : '0.00';
+  const lastClaimDate = lastClaimedTimestamp && Number(lastClaimedTimestamp) > 0
+    ? new Date(Number(lastClaimedTimestamp) * 1000).toLocaleString()
+    : 'Never';
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -285,6 +457,39 @@ export const Stake: React.FC = () => {
         <p className="text-muted-foreground text-lg">
           Choose from our available staking pools and start earning rewards
         </p>
+      </div>
+
+      {/* Welcome Faucet Section */}
+      <div className="max-w-4xl mx-auto mb-12">
+        <Card className="bg-gradient-surface border border-card-border rounded-lg p-8 hover:shadow-card-hover transition-all">
+          <CardHeader className="flex items-center gap-2 mb-6 p-0">
+            <Zap className="h-6 w-6 text-electric" />
+            <CardTitle className="font-orbitron text-2xl font-semibold hover-electric">
+              Welcome Faucet
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 p-0">
+            <p className="text-muted-foreground">
+              Claim {formattedFaucetAmount} free ADT tokens once per year.
+            </p>
+            <div className="text-sm">
+              Last Claim: <span className="font-semibold text-electric">{lastClaimDate}</span>
+            </div>
+            {timeUntilNextClaim && (
+              <div className="text-sm">
+                Next Claim In: <span className="font-semibold text-electric">{timeUntilNextClaim}</span>
+              </div>
+            )}
+            <Button
+              size="lg"
+              className="w-full bg-electric hover:bg-electric-glow text-black font-semibold py-4 text-lg"
+              onClick={handleClaimFaucetTokens}
+              disabled={!isConnected || isClaimingFaucet || !canClaim}
+            >
+              {isClaimingFaucet ? "Claiming..." : `Claim ${formattedFaucetAmount} Free Tokens`}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Stake/Unstake Actions */}
@@ -404,10 +609,7 @@ export const Stake: React.FC = () => {
                 <div className="flex items-start gap-2">
                   <Clock className="h-4 w-4 text-electric mt-0.5" />
                   <div>
-                    <div className="font-semibold">Instant Unbonding</div>
-                    <div className="text-muted-foreground">
-                      Tokens are available immediately after unstaking
-                    </div>
+                    Tokens are available immediately after unstaking
                   </div>
                 </div>
                 <div className="flex items-start gap-2">

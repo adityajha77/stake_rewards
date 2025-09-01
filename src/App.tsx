@@ -6,7 +6,6 @@ import { Navigation } from "@/components/Navigation";
 import Landing from "./pages/Landing";
 import Dashboard from "./pages/Dashboard";
 import Stake from "./pages/Stake";
-import Unbonding from "./pages/Unbonding";
 import Referrals from "./pages/Referrals";
 import About from "./pages/About";
 import NotFound from "./pages/NotFound";
@@ -22,7 +21,6 @@ const App = () => (
             <Route path="/" element={<Landing />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/stake" element={<Stake />} />
-            <Route path="/unbonding" element={<Unbonding />} />
             <Route path="/referrals" element={<Referrals />} />
             <Route path="/about" element={<About />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

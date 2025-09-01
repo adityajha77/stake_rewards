@@ -50,7 +50,7 @@ export const StakeCard: React.FC<StakeCardProps> = ({
               
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Your Stake</span>
-                <span className="font-semibold">{userStaked}</span>
+                <span className="font-semibold">{userStaked} ADT</span>
               </div>
             </div>
             
@@ -71,12 +71,6 @@ export const StakeCard: React.FC<StakeCardProps> = ({
                 <span>Pending Rewards: <strong className="text-electric">{rewards}</strong></span>
               </div>
               
-              {timeLeft && (
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-electric" />
-                  <span>Unbonding: <strong>{timeLeft}</strong></span>
-                </div>
-              )}
               
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4 text-electric" />

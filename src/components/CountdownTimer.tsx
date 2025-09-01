@@ -61,9 +61,7 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
     <div className={`${className}`}>
       <div className="flex items-center justify-center gap-2 mb-4">
         <Clock className="h-5 w-5 text-electric" />
-        <span className="font-orbitron text-lg font-semibold hover-electric">
-          Unbonding Period
-        </span>
+        <span className="font-orbitron text-lg font-semibold hover-electric">Countdown</span>
       </div>
       
       <div className="flex justify-center gap-4">

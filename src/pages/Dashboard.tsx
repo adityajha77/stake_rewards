@@ -1,53 +1,134 @@
 import React from 'react';
 import { StakeCard } from '@/components/StakeCard';
-import { CountdownTimer } from '@/components/CountdownTimer';
 import { Button } from '@/components/ui/button';
-import { 
-  Wallet, 
-  TrendingUp, 
-  Clock, 
-  Users, 
+import {
+  Wallet,
+  TrendingUp,
+  Users,
   Copy,
   ExternalLink,
-  Zap 
+  Zap,
+  CheckCircle
 } from 'lucide-react';
-
-// Mock data - replace with real data from smart contracts
-const mockData = {
-  walletBalance: "2,500.00",
-  totalStaked: "10,000.00",
-  totalRewards: "1,250.00",
-  pendingRewards: "125.50",
-  referralCount: 8,
-  referralRewards: "240.00",
-  loyaltyMultiplier: "1.5x",
-  nextUnbonding: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000), // 15 days from now
-};
-
-const stakingPools = [
-  {
-    poolName: "Main Pool",
-    apy: "18.4%",
-    tvl: "$12.5M",
-    userStaked: "10,000.00 FLOW",
-    rewards: "125.50 FLOW",
-    timeLeft: "15d 4h 32m",
-    isActive: true
-  },
-  {
-    poolName: "Partner Pool A",
-    apy: "22.1%",
-    tvl: "$2.8M",
-    userStaked: "0.00 FLOW",
-    rewards: "0.00 FLOW",
-    isActive: false
-  }
-];
+import { useAccount, useBalance, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
+import { sepolia } from 'wagmi/chains';
+import { formatUnits } from 'viem';
+import { ADITYA_TOKEN_ADDRESS, STAKING_CONTRACT_ADDRESS, STAKING_CONTRACT_ABI } from '@/contracts';
+import { useToast } from '@/components/ui/use-toast';
 
 export const Dashboard: React.FC = () => {
+  const { address, isConnected } = useAccount();
+  const { toast } = useToast();
+
+  // Fetch ADT Token Balance
+  const { data: adtBalanceData, refetch: refetchAdtBalance } = useBalance({
+    address: address,
+    token: ADITYA_TOKEN_ADDRESS,
+    chainId: sepolia.id,
+    query: {
+      enabled: isConnected && !!address,
+      refetchInterval: 5000,
+    },
+  });
+
+  // Fetch Staked Amount
+  const { data: stakedAmountData, refetch: refetchStakedBalance } = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS,
+    abi: STAKING_CONTRACT_ABI,
+    functionName: 'stakes',
+    args: [address || '0x0'],
+    chainId: sepolia.id,
+    query: {
+      enabled: isConnected && !!address,
+      refetchInterval: 5000,
+    },
+  });
+
+  // ✅ Fix: destructure tuple [amount, startTime]
+  const [stakeAmount = 0n] = (stakedAmountData || []) as [bigint, bigint];
+
+  // Fetch Earned Rewards
+  const { data: earnedRewardsData, refetch: refetchEarnedRewards } = useReadContract({
+    address: STAKING_CONTRACT_ADDRESS,
+    abi: STAKING_CONTRACT_ABI,
+    functionName: 'getEarnedRewards',
+    args: [address || '0x0'],
+    chainId: sepolia.id,
+    query: {
+      enabled: isConnected && !!address,
+      refetchInterval: 1000,
+    },
+  });
+
+  // Claim Rewards functionality
+  const { data: claimHash, writeContract: claimWrite } = useWriteContract();
+  const { isLoading: isClaiming, isSuccess: isClaimed } = useWaitForTransactionReceipt({
+    hash: claimHash,
+  });
+
+  React.useEffect(() => {
+    if (isClaimed) {
+      toast({
+        title: "Rewards Claimed",
+        description: "Your ADT rewards have been claimed.",
+      });
+      refetchAdtBalance();
+      refetchStakedBalance();
+      refetchEarnedRewards();
+    }
+  }, [isClaimed, refetchAdtBalance, refetchStakedBalance, refetchEarnedRewards, toast]);
+
+  const handleClaimRewards = () => {
+    if (!address) {
+      toast({
+        title: "Error",
+        description: "Please connect your wallet.",
+        variant: "destructive",
+      });
+      return;
+    }
+    claimWrite({
+      address: STAKING_CONTRACT_ADDRESS,
+      abi: STAKING_CONTRACT_ABI,
+      functionName: 'claimReward',
+      chainId: sepolia.id,
+      account: address,
+      chain: sepolia,
+    });
+  };
+
+  const walletBalance = adtBalanceData ? formatUnits(adtBalanceData.value, adtBalanceData.decimals) : "0.00";
+  const totalStaked = formatUnits(stakeAmount, 18);
+  const pendingRewards = earnedRewardsData ? formatUnits(earnedRewardsData as bigint, 18) : "0.00";
+
+  // Mock data for now, replace with actual contract calls for referral, loyalty
+  const mockData = {
+    referralCount: 8,
+    referralRewards: "240.00",
+    loyaltyMultiplier: "1.5x",
+  };
+
+  const stakingPools = [
+    {
+      poolName: "Main Pool",
+      apy: "10.0%",
+      tvl: "$1.0M",
+      userStaked: totalStaked,
+      rewards: pendingRewards + " ADT",
+      timeLeft: "Continuous",
+      isActive: true,
+      description: "Our flagship staking pool with competitive rewards and proven security.",
+      minStake: "1 ADT",
+      lockPeriod: "None"
+    },
+  ];
+
   const handleCopyReferral = () => {
     navigator.clipboard.writeText("https://stakeflow.app/ref/0x1234...abcd");
-    // Add toast notification
+    toast({
+      title: "Referral Link Copied!",
+      description: "Your referral link has been copied to the clipboard.",
+    });
   };
 
   return (
@@ -63,14 +144,14 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Stats Overview */}
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         <div className="bg-gradient-surface border border-card-border rounded-lg p-6 hover:shadow-card-hover transition-all">
           <div className="flex items-center justify-between mb-4">
             <Wallet className="h-8 w-8 text-electric" />
             <span className="text-sm text-muted-foreground">Wallet Balance</span>
           </div>
           <div className="font-orbitron text-2xl font-bold hover-electric">
-            {mockData.walletBalance} FLOW
+            {walletBalance} ADT
           </div>
         </div>
 
@@ -80,33 +161,25 @@ export const Dashboard: React.FC = () => {
             <span className="text-sm text-muted-foreground">Total Staked</span>
           </div>
           <div className="font-orbitron text-2xl font-bold hover-electric">
-            {mockData.totalStaked} FLOW
+            {totalStaked} ADT
           </div>
         </div>
 
-        <div className="bg-gradient-surface border border-card-border rounded-lg p-6 hover:shadow-card-hover transition-all">
+        <div className="bg-gradient-surface border border-electric/20 rounded-lg p-6 shadow-glow hover:shadow-glow-strong transition-all">
           <div className="flex items-center justify-between mb-4">
-            <TrendingUp className="h-8 w-8 text-electric" />
-            <span className="text-sm text-muted-foreground">Total Earned</span>
+            <CheckCircle className="h-8 w-8 text-electric" />
+            <span className="text-sm text-muted-foreground">Pending Rewards</span>
           </div>
           <div className="font-orbitron text-2xl font-bold text-electric">
-            {mockData.totalRewards} FLOW
+            {pendingRewards} ADT
           </div>
-        </div>
-
-        <div className="bg-gradient-surface border border-card-border rounded-lg p-6 hover:shadow-card-hover transition-all">
-          <div className="flex items-center justify-between mb-4">
-            <Clock className="h-8 w-8 text-electric" />
-            <span className="text-sm text-muted-foreground">Pending</span>
-          </div>
-          <div className="font-orbitron text-2xl font-bold text-electric">
-            {mockData.pendingRewards} FLOW
-          </div>
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             className="mt-2 w-full bg-electric hover:bg-electric-glow text-black"
+            onClick={handleClaimRewards}
+            disabled={!isConnected || isClaiming || parseFloat(pendingRewards) <= 0}
           >
-            Claim Rewards
+            {isClaiming ? "Claiming..." : "Claim Rewards"}
           </Button>
         </div>
       </div>
@@ -133,20 +206,6 @@ export const Dashboard: React.FC = () => {
 
         {/* Right Column - Quick Actions & Info */}
         <div className="space-y-6">
-          {/* Unbonding Timer */}
-          <div className="bg-gradient-surface border border-card-border rounded-lg p-6">
-            <CountdownTimer 
-              targetDate={mockData.nextUnbonding}
-              onComplete={() => console.log('Unbonding complete!')}
-            />
-            <Button 
-              variant="outline" 
-              className="w-full mt-4 border-electric text-electric hover:bg-electric/10"
-            >
-              Withdraw Available
-            </Button>
-          </div>
-
           {/* Loyalty Multiplier */}
           <div className="bg-gradient-surface border border-electric/20 rounded-lg p-6 shadow-glow">
             <div className="text-center">
@@ -171,7 +230,7 @@ export const Dashboard: React.FC = () => {
               <Users className="h-5 w-5 text-electric" />
               <h3 className="font-orbitron font-semibold hover-electric">Referrals</h3>
             </div>
-            
+
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Friends Invited</span>
@@ -179,10 +238,10 @@ export const Dashboard: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Bonus Earned</span>
-                <span className="font-bold text-electric">{mockData.referralRewards} FLOW</span>
+                <span className="font-bold text-electric">{mockData.referralRewards} ADT</span>
               </div>
             </div>
-            
+
             <Button
               variant="outline"
               className="w-full mt-4 border-electric text-electric hover:bg-electric/10"

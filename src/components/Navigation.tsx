@@ -18,7 +18,6 @@ const navItems = [
   { name: 'Home', path: '/', icon: Home },
   { name: 'Dashboard', path: '/dashboard', icon: BarChart3 },
   { name: 'Stake', path: '/stake', icon: Coins },
-  { name: 'Unbonding', path: '/unbonding', icon: Clock },
   { name: 'Referrals', path: '/referrals', icon: Users },
   { name: 'About', path: '/about', icon: BookOpen },
 ];

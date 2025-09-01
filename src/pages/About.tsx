@@ -50,10 +50,6 @@ const risks = [
     description: "Despite audits, smart contracts may contain bugs or vulnerabilities."
   },
   {
-    title: "Unbonding Period",
-    description: "21-day lock period means your tokens cannot be accessed immediately after unstaking."
-  },
-  {
     title: "Reward Volatility", 
     description: "APY rates may fluctuate based on network conditions and total staked amount."
   },
